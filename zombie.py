@@ -47,6 +47,9 @@ class Zombie:
 
         self.build_behavior_tree()
 
+        self.patrol_locations = [(43,274),(1118,274),(1050,494),(575,804),(235,991),(575,804),(1050,494),(1118,274)]
+        self.loc_no=0
+
 
     def get_bb(self):
         return self.x - 50, self.y - 50, self.x + 50, self.y + 50
@@ -65,7 +68,7 @@ class Zombie:
             Zombie.images[self.state][int(self.frame)].draw(self.x, self.y, 100, 100)
         self.font.draw(self.x - 10, self.y + 60, f'{self.ball_count}', (0, 0, 255))
         draw_rectangle(*self.get_bb())
-        Zombie.marker_image.draw(self.tx,self.ty)
+        self.marker_image.draw(self.tx,self.ty)
 
     def handle_event(self, event):
         pass
@@ -94,6 +97,13 @@ class Zombie:
         self.y +=distance*math.sin(self.dir)
         pass
 
+    def move_slightly_back(self, tx, ty):
+        self.dir =math.atan2(ty -self.y,tx-self.x)
+        distance=RUN_SPEED_PPS*game_framework.frame_time
+        self.x -=distance*math.cos(self.dir)
+        self.y -=distance*math.sin(self.dir)
+        pass
+
     def move_to(self, r=0.5):
         self.state ='Walk'
         self.move_slightly_to(self.tx,self.ty)
@@ -115,6 +125,13 @@ class Zombie:
             return BehaviorTree.FAIL
         pass
 
+    def is_boy_manyball(self):
+        if self.ball_count <play_mode.boy.ball_count:
+            return BehaviorTree.SUCCESS
+        else:
+            return BehaviorTree.FAIL
+        pass
+
     def move_to_boy(self, r=0.5):
         self.state = 'Walk'
         self.move_slightly_to(play_mode.boy.x,play_mode.boy.y)
@@ -124,7 +141,20 @@ class Zombie:
             return BehaviorTree.RUNNING
         pass
 
+    def run_to_boy(self, r=0.5):
+        self.state = 'Walk'
+        self.move_slightly_back(play_mode.boy.x,play_mode.boy.y)
+        if self.distance_less_than(play_mode.boy.x,play_mode.boy.y, self.x, self.y, r):
+            return BehaviorTree.RUNNING
+        else:
+            return BehaviorTree.SUCCESS
+        pass
+
     def get_patrol_location(self):
+        self.tx,self.ty=self.patrol_locations[self.loc_no]
+        self.loc_no= ( self.loc_no+1)%len(self.patrol_locations)
+        return BehaviorTree.SUCCESS
+
         pass
 
     def build_behavior_tree(self):
@@ -139,7 +169,17 @@ class Zombie:
         a4 =Action('소년한테 접근',self.move_to_boy)
         root=chase_boy=Sequence('소년을 추적',c1,a4)
 
-        root =chase_or_flee = Selector('추적 또는 배회',chase_boy ,wander)
+        root = chase_or_flee = Selector('추적 또는 배회', chase_boy, wander)
+
+        # a5=Action('순찰 위치 가져오기',self.get_patrol_location)
+        # root = patrol = Sequence('순찰',a5,a2)
+
+        c2 = Condition('소년이 더 공이 많은가?', self.is_boy_manyball)
+        a5 = Action('소년한테 도망', self.run_to_boy)
+        root = run_boy = Sequence('소년을 추적', c1,c2, a5)
+
+        root = chase_or_run = Selector('추적 또는 도망',  run_boy,chase_boy, wander)
+
 
         self.bt=BehaviorTree(root)
         pass
